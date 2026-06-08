@@ -1,0 +1,72 @@
+version: "3.9"
+ 
+services:
+ 
+  # ── Main API service ────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: production-rag-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Override these in .env or docker-compose.override.yml
+      - LOG_LEVEL=INFO
+      - ENABLE_METRICS=true
+      - RATE_LIMIT_PER_MINUTE=20
+      - RATE_LIMIT_PER_HOUR=200
+      # Secrets — set via .env file, never hardcode here
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - ALLOWED_API_KEYS=${ALLOWED_API_KEYS:-dev-key-1,dev-key-2}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
+    volumes:
+      # Mount vector store data directory
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - rag-network
+ 
+  # ── Development service (hot reload) ─────────────────────────
+  api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: production-rag-api-dev
+    ports:
+      - "8001:8000"
+    environment:
+      - LOG_LEVEL=DEBUG
+      - SECRET_KEY=dev-secret-key-not-for-production
+      - ALLOWED_API_KEYS=dev-key-1
+    volumes:
+      - ./app:/app/app     # Hot reload — code changes reflect immediately
+      - ./data:/app/data
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --log-level debug
+    profiles:
+      - dev
+    networks:
+      - rag-network
+ 
+networks:
+  rag-network:
+    driver: bridge
+ 
+volumes:
+  rag-data:
