@@ -17,13 +17,13 @@ import uuid
  
 from app.routes.query import router as query_router
 from app.routes.health import router as health_router
+from app.routes.stream import router as stream_router
 from app.core.logging import setup_logging, get_logger
  
  
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
  
-    # Setup logging first
     setup_logging()
     logger = get_logger(__name__)
  
@@ -32,14 +32,13 @@ def create_app() -> FastAPI:
         description=(
             "A production-grade REST API wrapping a RAG pipeline. "
             "Async endpoints, JWT/API key auth, rate limiting, "
-            "streaming responses, and integrated LLM guardrails."
+            "SSE streaming responses, and integrated LLM guardrails."
         ),
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
     )
  
-    # CORS
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -48,20 +47,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
  
-    # Request ID + timing + structured logging middleware
     @app.middleware("http")
     async def request_context_middleware(request: Request, call_next):
         request_id = str(uuid.uuid4())[:8]
         request.state.request_id = request_id
         request.state.start_time = time.time()
- 
         response = await call_next(request)
- 
         latency_ms = round((time.time() - request.state.start_time) * 1000, 2)
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Response-Time"] = f"{latency_ms}ms"
- 
-        # Structured log every request
         logger.info(
             "request_completed",
             method=request.method,
@@ -70,10 +64,8 @@ def create_app() -> FastAPI:
             latency_ms=latency_ms,
             request_id=request_id
         )
- 
         return response
  
-    # Exception handlers
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError):
         return JSONResponse(
@@ -97,7 +89,6 @@ def create_app() -> FastAPI:
             }
         )
  
-    # Lifecycle
     @app.on_event("startup")
     async def startup_event():
         logger.info("api_startup", version="0.1.0")
@@ -106,8 +97,9 @@ def create_app() -> FastAPI:
     async def shutdown_event():
         logger.info("api_shutdown")
  
-    # Routes
+    # Register all routers
     app.include_router(query_router, prefix="/api/v1", tags=["Query"])
+    app.include_router(stream_router, prefix="/api/v1", tags=["Streaming"])
     app.include_router(health_router, prefix="/api/v1", tags=["Observability"])
  
     @app.get("/", tags=["Root"])
@@ -115,9 +107,15 @@ def create_app() -> FastAPI:
         return {
             "service": "production-rag-api",
             "version": "0.1.0",
-            "docs": "/docs",
-            "health": "/api/v1/health",
-            "metrics": "/api/v1/metrics"
+            "endpoints": {
+                "docs": "/docs",
+                "query": "/api/v1/query",
+                "stream": "/api/v1/query/stream",
+                "health": "/api/v1/health",
+                "ready": "/api/v1/ready",
+                "metrics": "/api/v1/metrics",
+                "stats": "/api/v1/stats"
+            }
         }
  
     return app
