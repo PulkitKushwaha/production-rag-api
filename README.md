@@ -46,12 +46,12 @@ Client
 │                                            │
 │  CORS → Request ID → Timing → Logging      │
 │                    ↓                       │
-│  ┌─────────┐  ┌──────────────┐             │
-│  │  Auth   │  │ Rate Limiter │             │
-│  │Middleware│  │  Middleware  │             │
-│  └────┬────┘  └──────┬───────┘             │
-│       └──────────────┘                     │
-│                    ↓                       │
+│  ┌──────────┐   ┌──────────────┐           │
+│  │  Auth    │   │ Rate Limiter │           │
+│  │Middleware│   │ Middleware   │           │
+│  └────┬─────┘   └──────┬───────┘           │
+│       └────────────────┘                   │
+│                ↓                           │
 │  POST /query ──────────────────────────    │
 │    Input Guardrails                        │
 │      ├─ Topic scope validation             │
